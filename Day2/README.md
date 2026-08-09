@@ -123,12 +123,6 @@ This approach improves the **reliability, predictability, and synchronization** 
 
 The design is composed of multiple modules, where the top module instantiates lower-level submodules. This hierarchical organization improves readability, modularity, and code reuse.
 
-**Figure 5: Module Hierarchy**
-
-<p align="center">
-  <img src="modules(info).jpeg" alt="Module Hierarchy" width="850">
-</p>
-
 The figure shows the hierarchical structure of the `multiple_modules` design. The top-level module instantiates `sub_module1` and `sub_module2`, which communicate through the intermediate signal `net1`. This demonstrates how a complex design can be divided into smaller, reusable modules while maintaining a clear hierarchical organization.
 
 ---
