@@ -77,13 +77,6 @@ write_verilog multiple_modules_flat.v
 
 - `multiple_modules_hier.v` → **Hierarchical** gate-level netlist
 - `multiple_modules_flat.v` → **Flattened** gate-level netlist
-
-**Figure 1: Hierarchical Netlist**
-
-<p align="center">
-  <img src="multiple_modules(netlist).jpeg" width="850">
-</p>
-
 ---
 
 ## Submodule-Level Synthesis
@@ -95,31 +88,11 @@ Instead of synthesizing the complete design, an individual submodule can be synt
 - Verifying a submodule's implementation
 - Understanding reusable design blocks before full integration
 
-**Figure 2: Synthesized Submodule Netlist**
-
-<p align="center">
-  <img src="sub_module1(netlist).jpeg" width="850">
-</p>
-
 ---
 
 ## Flip-Flops and Their Role in Digital Circuits
 
 A **flip-flop** is a sequential storage element capable of storing a single bit of information. Unlike combinational logic — whose output changes immediately with input changes — a flip-flop updates its output only when a triggering event, typically a **clock edge**, occurs. This controlled behavior makes flip-flops essential in synchronous digital systems.
-
-**Figure 3: D Flip-Flop Waveform**
-
-<p align="center">
-  <img src="dff(waveform).jpeg" width="850">
-</p>
-
-**Figure 4: Synthesized D Flip-Flop Netlist**
-
-<p align="center">
-  <img src="dff(netlist).jpeg" width="850">
-</p>
-
----
 
 ## Glitches in Combinational Logic
 
