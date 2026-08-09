@@ -93,9 +93,6 @@ The generated VCD file was opened in GTKWave to verify the functional behavior o
 gtkwave tb_good_mux.vcd
 ```
 
-**Figure 2: GTKWave Waveform of Good Mux**
-![Good Mux Waveform](good_mux(waveform).jpeg)
-
 The waveform confirms that the output `y` follows the selected input according to the value of `sel`:
 
 - When `sel = 0`, the output `y` follows `i0`.
@@ -146,9 +143,6 @@ abc -liberty ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 
 write_verilog -noattr good_mux_net.v
 ```
-
-**Figure 3: Synthesized Netlist of Good Mux**
-![Good Mux Synthesized Netlist](good_mux(netlist).jpeg)
 
 The synthesized netlist shows the `good_mux` RTL description implemented as an interconnection of standard cells from the SKY130 library, rather than a behavioral `always`/`assign` statement. This netlist is what gets carried forward into gate-level simulation and physical implementation.
 
