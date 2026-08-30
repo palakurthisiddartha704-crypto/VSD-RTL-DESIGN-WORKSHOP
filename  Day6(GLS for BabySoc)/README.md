@@ -281,6 +281,7 @@ your-repo/
 | `images/terminal_commands.png` | Pre-synthesis | Terminal log of `iverilog -DPRE_SYNTH_SIM`, `vvp`, `gtkwave` |
 | `images/pre_synth_waveform_1.png` | Pre-synthesis | Full signal list incl. RV_TO_DAC bits |
 | `images/pre_synth_waveform_2.png` | Pre-synthesis | Zoomed on RV_TO_DAC bit activity |
+| `images?post_synth_waveform.png`  |post-synthesis | Full signl list incl. RV_TO_DAc bits|
 | `images/pre_synth_waveform_3.png` | Pre-synthesis | Top-level signals before expansion |
 | `images/yosys_schematic_terminal.png` | Synthesis | Yosys `read_verilog`/`show` commands + resulting schematic |
 | `images/yosys_schematic_full_1.png` | Synthesis | Full post-synthesis schematic (view 1) |
