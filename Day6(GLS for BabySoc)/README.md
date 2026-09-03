@@ -1,17 +1,15 @@
 # VSDBabySoC — Pre-Synthesis vs Post-Synthesis Simulation
 
-This project covers the **Pre-Synthesis (RTL) Simulation**, **Yosys Synthesis**, and **Post-Synthesis (Gate-Level/GLS) Simulation** of the **VSDBabySoC** design.
-
-The main objective is to verify that the synthesized gate-level design preserves the functional behavior of the original RTL design.
-
----
+This document covers the functional (pre-synthesis / RTL) simulation and the gate-level
+(post-synthesis / GLS) simulation of **VSDBabySoC**, along with a synthesis walkthrough using
+Yosys and a comparison of the two simulation results.
 
 ## Table of Contents
 
 1. [Design Overview](#1-design-overview)
-2. [Pre-Synthesis Simulation](#2-pre-synthesis-simulation)
-3. [Synthesis Using Yosys](#3-synthesis-using-yosys)
-4. [Post-Synthesis Simulation](#4-post-synthesis-simulation)
+2. [Pre-Synthesis (RTL) Simulation](#2-pre-synthesis-rtl-simulation)
+3. [Synthesis (Yosys)](#3-synthesis-yosys)
+4. [Post-Synthesis (Gate-Level) Simulation](#4-post-synthesis-gate-level-simulation)
 5. [Pre-Synthesis vs Post-Synthesis Comparison](#5-pre-synthesis-vs-post-synthesis-comparison)
 6. [Summary of Commands](#6-summary-of-commands)
 7. [Evidence](#7-evidence)
@@ -20,396 +18,298 @@ The main objective is to verify that the synthesized gate-level design preserves
 
 ---
 
-# 1. Design Overview
+## 1. Design Overview
 
-VSDBabySoC is a small SoC consisting of three major blocks:
+VSDBabySoC is a small SoC built around three main blocks:
 
-| Block    | Module    | Description                                              |
-| -------- | --------- | -------------------------------------------------------- |
-| CPU Core | `rvmyth`  | RISC-V core generated from TL-Verilog                    |
-| PLL      | `avsdpll` | Generates the clock signal                               |
-| DAC      | `avsddac` | Converts the 10-bit digital output into an analog output |
+| Block | Module | Description |
+|---|---|---|
+| CPU core | `rvmyth` (`rvmyth.v` / `rvmyth.tlv`) | A RISC-V core (RVMYTH), generated from TL-Verilog |
+| PLL | `avsdpll` | Analog PLL that generates `CLK` from `REF`, `ENb_CP`, `ENb_VCO`, `VCO_IN` |
+| DAC | `avsddac` | 10-bit DAC that converts `RV_TO_DAC[9:0]` (from the RVMYTH core's output register) into an analog `OUT` |
 
-### Top-Level Module
+**Top-level module:** `vsdbabysoc` (`src/module/vsdbabysoc.v`)
+**Testbench:** `src/module/testbench.v`
 
-```text
-src/module/vsdbabysoc.v
+**Signal flow:**
+```
+ENb_CP, ENb_VCO, REF, VCO_IN → [avsdpll] → CLK
+CLK, reset → [rvmyth core] → OUT → RV_TO_DAC[9:0]
+RV_TO_DAC[9:0], VREFH → [avsddac] → OUT (analog)
 ```
 
-### Testbench
+### Repository layout (as used in this run)
 
-```text
-src/module/testbench.v
 ```
-
-### Signal Flow
-
-```text
-ENb_CP, ENb_VCO, REF, VCO_IN
-              │
-              ▼
-        ┌─────────────┐
-        │   avsdpll   │
-        │     PLL     │
-        └──────┬──────┘
-               │ CLK
-               ▼
-        ┌─────────────┐
-        │   rvmyth    │
-        │ RISC-V Core │
-        └──────┬──────┘
-               │
-         RV_TO_DAC[9:0]
-               │
-               ▼
-        ┌─────────────┐
-        │   avsddac   │
-        │     DAC     │
-        └──────┬──────┘
-               │
-               ▼
-              OUT
-```
-
----
-
-## Repository Structure
-
-The screenshots used in this README are stored **directly in the same `Day 6` folder as this README.md file**.
-
-```text
-Day 6/
+baby_soc/BabySoC_Simulation/
 ├── README.md
-├── pre_synth_waveform_1.png
-├── pre_synth_waveform_2.png
-├── pre_synth_waveform_3.png
-├── post_synth_waveform.png
-├── yosys_schematic_terminal.png
-├── yosys_schematic_full_1.png
-├── yosys_schematic_full_2.png
-└── pre_vs_post_synth_comparison.png
+└── src/
+    ├── include/
+    │   ├── sandpiper_gen.vh
+    │   ├── sandpiper.vh
+    │   ├── sp_default.vh
+    │   └── sp_verilog.vh
+    ├── gls_model/
+    └── module/
+        ├── avsddac.v
+        ├── avsdpll.v
+        ├── clk_gate.v
+        ├── pseudo_rand.sv
+        ├── pseudo_rand_gen.sv
+        ├── rvmyth_gen.v
+        ├── rvmyth.tlv
+        ├── rvmyth.v
+        ├── testbench.rvmyth.post-routing.v
+        ├── testbench.v
+        └── vsdbabysoc.v
 ```
 
 ---
 
-# 2. Pre-Synthesis Simulation
+## 2. Pre-Synthesis (RTL) Simulation
 
-Pre-synthesis simulation verifies the original RTL design before synthesis.
+Pre-synthesis simulation runs the original RTL modules (`vsdbabysoc.v`, `rvmyth.v`, `avsdpll.v`,
+`avsddac.v`) directly through `iverilog` + `vvp`, using the `PRE_SYNTH_SIM` macro to select the
+behavioral (non-gate-level) models.
 
-The RTL modules used are:
-
-* `vsdbabysoc.v`
-* `rvmyth.v`
-* `avsdpll.v`
-* `avsddac.v`
-
-The simulation is performed using **Icarus Verilog (`iverilog`)** and **VVP**.
-
-The `PRE_SYNTH_SIM` macro is used to select the behavioral RTL models.
-
-## Commands Used
+### Commands used
 
 ```bash
 cd ~/baby_soc/BabySoC_Simulation/src/module
 
+# Compile RTL + testbench
 iverilog -o pre_synth_sim.out -DPRE_SYNTH_SIM testbench.v -I ../include -I .
 
+# Run the simulation
 vvp pre_synth_sim.out
 ```
 
-### Simulation Output
-
-```text
+**Output:**
+```
 VCD info: dumpfile pre_synth_sim.vcd opened for output.
 testbench.v:63: $finish called at 84999000 (1ps)
 ```
 
-The testbench runs for approximately:
+The testbench runs for **84,999,000 ps (≈ 85 µs)** before calling `$finish`.
 
-```text
-84,999,000 ps ≈ 85 µs
-```
+*Terminal session — navigating the repo, compiling with `iverilog -DPRE_SYNTH_SIM`, running with `vvp`, and launching GTKWave.*
 
-## Viewing the Waveform
+### Viewing the waveform
 
 ```bash
 gtkwave pre_synth_sim.vcd
 ```
 
-### Signals Observed
+### What the waveform shows
 
-The following signals can be observed in GTKWave:
+Signals observed: `CLK`, `reset`, `ENb_CP`, `ENb_VCO`, `REF`, `VCO_IN`, `VREFH`, `VREFL`, `OUT`,
+`RV_TO_DAC[9:0]` (and its individual bits `RV_TO_DAC[0]` … `RV_TO_DAC[9]`).
 
-* `CLK`
-* `reset`
-* `ENb_CP`
-* `ENb_VCO`
-* `REF`
-* `VCO_IN`
-* `VREFH`
-* `VREFL`
-* `OUT`
-* `RV_TO_DAC[9:0]`
+- `reset` is asserted briefly at the start, then de-asserted.
+- `CLK` toggles continuously (generated by the PLL model) throughout the run.
+- `ENb_VCO` = 1, `VREFH` = 3.3, `VREFL` = 0 — static analog reference/enable levels.
+- `RV_TO_DAC[9:0]` continuously updates as the RVMYTH core executes, driving the DAC's digital
+  input bus. Each bit line (`[0]` through `[9]`) toggles at different rates, consistent with a
+  changing 10-bit value coming out of the CPU core.
+- `OUT` (the DAC's analog output, shown as a `real` signal) steps between discrete levels (0 → 1
+  → 0 → 1 …) in sync with changes on `RV_TO_DAC[9:0]`, confirming the DAC is correctly converting
+  the digital bus into an analog waveform.
 
-The individual bits of `RV_TO_DAC[9:0]` can also be expanded.
+This confirms the RTL design functions correctly end-to-end: PLL → CPU core → DAC.
 
-### Pre-Synthesis Waveform
+![Pre-synthesis waveform, full signal list](pre_synth_waveform_1.png)
+*Pre-synthesis GTKWave trace — CLK, reset, ENb_VCO, OUT, REF, VREFH/VREFL, and RV_TO_DAC[9:0] (with individual bits expanded).*
 
-![Pre-synthesis waveform](./pre_synth_waveform_1.png)
+![Pre-synthesis waveform, zoomed on RV_TO_DAC bit activity](pre_synth_waveform_2.png)
+*Same trace, showing RV_TO_DAC bit-level toggling and the corresponding DAC OUT steps in more detail.*
 
-*Pre-synthesis GTKWave trace showing the main signals and RV_TO_DAC bus.*
-
-### RV_TO_DAC Bit Activity
-
-![Pre-synthesis waveform zoomed](./pre_synth_waveform_2.png)
-
-*Zoomed waveform showing RV_TO_DAC bit-level activity and DAC output changes.*
-
-### Top-Level Signals
-
-![Pre-synthesis top-level signals](./pre_synth_waveform_3.png)
-
-*Top-level pre-synthesis signals before expanding the RV_TO_DAC bus.*
+![Pre-synthesis waveform, top-level signal group before expansion](pre_synth_waveform_3.png)
+*Top-level pre-synthesis signals (ENb_CP, ENb_VCO, OUT, REF, VCO_IN, VREFH, VREFL, reset) before drilling into RV_TO_DAC bits.*
 
 ---
 
-# 3. Synthesis Using Yosys
+## 3. Synthesis (Yosys)
 
-After verifying the RTL simulation, synthesis is performed using **Yosys**.
+Synthesis was run interactively in Yosys to generate a gate-level schematic of the top module.
 
-Yosys converts the RTL description into a synthesized representation and generates a schematic of the design.
-
-## Commands Used
+### Commands used
 
 ```bash
 cd ~/baby_soc/BabySoC_Simulation
-
 yosys
+
+yosys> read_verilog src/module/vsdbabysoc.v
+yosys> read_verilog -I src/include/ src/module/rvmyth.v
+yosys> show
+yosys> show vsdbabysoc
 ```
 
-Inside Yosys:
+### Result
 
-```text
-read_verilog src/module/vsdbabysoc.v
-read_verilog -I src/include/ src/module/rvmyth.v
-show
-show vsdbabysoc
+Yosys generates a Graphviz `.dot` schematic (`~/.yosys_show.dot`), viewable with `xdot`. The
+schematic clearly shows the three-block structure of the design:
+
+```
+ENb_CP  ─┐
+ENb_VCO ─┤
+REF     ─┼─► [pll: avsdpll] ──CLK──► [core: rvmyth] ──OUT──► RV_TO_DAC ──► [dac: avsddac] ──► OUT
+VCO_IN  ─┘         ▲                     ▲                                      ▲
+                    │                   reset                                 VREFH
+                  (internal CLK net)
 ```
 
-### Synthesized Design Structure
+- **`pll` (avsdpll)** takes `ENb_CP`, `ENb_VCO`, `REF`, `VCO_IN` as inputs and produces `CLK`.
+- **`core` (rvmyth)** takes `CLK` and `reset`, and produces `OUT`, which feeds `RV_TO_DAC`.
+- **`dac` (avsddac)** takes `RV_TO_DAC` (as `D`) and `VREFH`, and produces the analog `OUT`.
 
-```text
-ENb_CP ─┐
-ENb_VCO ┤
-REF ────┼──► avsdpll ──► CLK ──► rvmyth ──► RV_TO_DAC ──► avsddac ──► OUT
-VCO_IN ─┘                                      │
-                                               │
-                                              VREFH
-```
+This matches the RTL structure exactly — synthesis preserved the intended hierarchy and
+connectivity of the design.
 
-The synthesized structure preserves the intended connectivity:
+![Yosys read_verilog and show commands in terminal, with resulting schematic](yosys_schematic_terminal.png)
+*Yosys terminal session (`read_verilog`, `show`, `show vsdbabysoc`) alongside the generated Dot Viewer schematic showing pll → core (rvmyth) → RV_TO_DAC → dac (avsddac) → OUT.*
 
-```text
-PLL → CPU Core → DAC
-```
+![Full post-synthesis schematic, view 1](yosys_schematic_full_1.png)
+*Full-screen view of the synthesized schematic — ENb_CP/ENb_VCO/REF/VCO_IN feeding the PLL, PLL CLK driving the rvmyth core, core OUT feeding RV_TO_DAC, and RV_TO_DAC + VREFH feeding the DAC.*
 
-### Yosys Terminal and Schematic
 
-![Yosys terminal and schematic](./yosys_schematic_terminal.png)
-
-*Yosys synthesis commands and generated schematic.*
-
-### Full Synthesized Schematic — View 1
-
-![Yosys schematic view 1](./yosys_schematic_full_1.png)
-
-*Full synthesized schematic showing the PLL, RVMYTH core, and DAC.*
-
-### Full Synthesized Schematic — View 2
-
-![Yosys schematic view 2](./yosys_schematic_full_2.png)
-
-*Additional view of the synthesized design.*
 
 ---
 
-# 4. Post-Synthesis Simulation
+## 4. Post-Synthesis (Gate-Level) Simulation
 
-Post-synthesis simulation, also called **Gate-Level Simulation (GLS)**, verifies the synthesized design.
+The synthesized netlist (`vsdbabysoc.synth.v`, using gate-level/GLS models for `rvmyth`, `pll`,
+and `dac`) is simulated with the same testbench, compiled this time with the `POST_SYNTH_SIM`
+(or equivalent GLS) macro and Sky130 primitive/gate models included, producing `post_synth_sim.vcd`.
 
-The synthesized netlist is simulated using the same testbench.
-
-The `POST_SYNTH_SIM` macro is used for the post-synthesis simulation.
-
-## Commands Used
+### Typical command pattern used
 
 ```bash
 cd ~/baby_soc/BabySoC_Simulation/src/module
 
 iverilog -o post_synth_sim.out -DPOST_SYNTH_SIM \
--I ../include -I ../gls_model \
-testbench.v
+    -I ../include -I ../gls_model \
+    testbench.v
 
 vvp post_synth_sim.out
-
 gtkwave post_synth_sim.vcd
 ```
 
-The post-synthesis simulation produces:
+### What the waveform shows
 
-```text
-post_synth_sim.vcd
-```
-
-### Post-Synthesis Waveform
-
-![Post-synthesis waveform](./post_synth_waveform.png)
-
-*Post-synthesis GTKWave waveform showing the gate-level simulation signals.*
+The same signal set (`CLK`, `reset`, `OUT`, `RV_TO_DAC[9:0]` and its individual bits) is present
+in the post-synthesis dump, now sourced from the gate-level netlist (visible in the GTKWave
+hierarchy as `uut → core`, `uut → dac`, `uut → pll` sub-modules, instead of flat RTL signals).
 
 ---
 
-# 5. Pre-Synthesis vs Post-Synthesis Comparison
+## 5. Pre-Synthesis vs Post-Synthesis Comparison
 
-The pre-synthesis and post-synthesis simulations are compared using GTKWave.
+Both `pre_synth_sim.vcd` and `post_synth_sim.vcd` were opened side-by-side in GTKWave for direct
+comparison of `CLK`, `reset`, `OUT`, and `RV_TO_DAC[9:0]` (plus its individual bits).
 
-The important signals compared are:
+![Pre-synthesis vs post-synthesis waveform, side-by-side in GTKWave](pre_vs_post_synth_comparison.png)
+*Top window: `pre_synth_sim.vcd`. Bottom window: `post_synth_sim.vcd` (with `uut → core / dac / pll` hierarchy visible, confirming it's the synthesized netlist). `CLK`, `reset`, `OUT`, and `RV_TO_DAC[9:0]` line up between the two.*
 
-* `CLK`
-* `reset`
-* `OUT`
-* `RV_TO_DAC[9:0]`
+| Aspect | Pre-Synthesis (RTL) | Post-Synthesis (GLS) | Match? |
+|---|---|---|---|
+| Simulation end time | 84,999,000 ps (≈85 µs) | 84,999,000 ps (≈85 µs) | Yes |
+| `CLK` behavior | Continuous toggling from PLL model | Continuous toggling, same rate | Yes |
+| `reset` behavior | Asserted briefly at start, then low | Same | Yes |
+| `OUT` (DAC output) pattern | Steps 0→1→0→1… at matching points in time | Same stepped pattern, same timing | Yes |
+| `RV_TO_DAC[9:0]` bus activity | Bits toggle at varying rates as CPU executes | Same toggling pattern observed | Yes |
+| Internal hierarchy visible in GTKWave | Flat top-level signals | `uut → core / dac / pll` sub-hierarchy visible (gate-level netlist) | Structural difference only |
 
-### Comparison Waveform
-
-![Pre-synthesis vs post-synthesis comparison](./pre_vs_post_synth_comparison.png)
-
-*Side-by-side comparison of the pre-synthesis and post-synthesis waveforms.*
-
-## Comparison Table
-
-| Aspect              | Pre-Synthesis             | Post-Synthesis         | Match                 |
-| ------------------- | ------------------------- | ---------------------- | --------------------- |
-| Simulation End Time | 84,999,000 ps             | 84,999,000 ps          | ✅ Yes                 |
-| `CLK` Behavior      | Continuous toggling       | Continuous toggling    | ✅ Yes                 |
-| `reset`             | Asserted briefly at start | Same behavior          | ✅ Yes                 |
-| `OUT` Pattern       | 0 → 1 → 0 → 1...          | Same pattern           | ✅ Yes                 |
-| `RV_TO_DAC[9:0]`    | Active and changing       | Same activity observed | ✅ Yes                 |
-| Design Structure    | RTL modules               | Gate-level hierarchy   | Structural difference |
-
-## Conclusion
-
-The pre-synthesis and post-synthesis simulations show matching functional behavior.
-
-The `OUT` and `RV_TO_DAC[9:0]` waveforms show the same overall behavior and transition pattern.
-
-This indicates that the synthesis process preserved the functional behavior of the original RTL design.
-
-The main structural difference is that the post-synthesis design is represented as a synthesized gate-level hierarchy.
+**Conclusion:** The `OUT` and `RV_TO_DAC[9:0]` waveforms line up between the pre-synthesis and
+post-synthesis runs — the same overall shape, the same transition points, and the same total
+simulation time. This indicates that synthesis preserved the functional behavior of the design:
+the gate-level netlist produced by Yosys behaves equivalently to the original RTL for this
+testbench, even though internally the design is now expressed as a hierarchy of synthesized
+cells (`core`, `dac`, `pll` sub-modules) rather than flat RTL always-blocks.
 
 ---
 
-# 6. Summary of Commands
-
-## Pre-Synthesis Simulation
+## 6. Summary of Commands
 
 ```bash
+# --- Pre-synthesis simulation ---
 cd ~/baby_soc/BabySoC_Simulation/src/module
-
 iverilog -o pre_synth_sim.out -DPRE_SYNTH_SIM testbench.v -I ../include -I .
-
 vvp pre_synth_sim.out
-
 gtkwave pre_synth_sim.vcd
-```
 
-## Yosys Synthesis
-
-```bash
+# --- Synthesis (Yosys) ---
 cd ~/baby_soc/BabySoC_Simulation
-
 yosys
-```
+    read_verilog src/module/vsdbabysoc.v
+    read_verilog -I src/include/ src/module/rvmyth.v
+    show
+    show vsdbabysoc
 
-Inside Yosys:
-
-```text
-read_verilog src/module/vsdbabysoc.v
-read_verilog -I src/include/ src/module/rvmyth.v
-show
-show vsdbabysoc
-```
-
-## Post-Synthesis Simulation
-
-```bash
+# --- Post-synthesis (GLS) simulation ---
 cd ~/baby_soc/BabySoC_Simulation/src/module
-
-iverilog -o post_synth_sim.out -DPOST_SYNTH_SIM \
--I ../include -I ../gls_model \
-testbench.v
-
+iverilog -o post_synth_sim.out -DPOST_SYNTH_SIM -I ../include -I ../gls_model testbench.v
 vvp post_synth_sim.out
-
 gtkwave post_synth_sim.vcd
 ```
 
 ---
 
-# 7. Evidence
+## 7. Evidence
 
-All screenshots are stored **directly beside `README.md` in the Day 6 folder**.
+All screenshots referenced above live in the `images/` folder next to this README, and are
+linked with normal relative paths (`images/xxx.png`) so they render inline on GitHub without
+any extra setup — just keep the folder structure below intact when you commit.
 
-### Available Screenshots
+```
+your-repo/
+├── README.md
+└── images/
+    ├── terminal_commands.png
+    ├── pre_synth_waveform_1.png
+    ├── pre_synth_waveform_2.png
+    ├── pre_synth_waveform_3.png
+    ├── yosys_schematic_terminal.png
+    ├── yosys_schematic_full_1.png
+    ├── yosys_schematic_full_2.png
+    └── pre_vs_post_synth_comparison.png
+```
 
-| Image                              | Purpose                             |
-| ---------------------------------- | ----------------------------------- |
-| `pre_synth_waveform_1.png`         | Full pre-synthesis waveform         |
-| `pre_synth_waveform_2.png`         | Zoomed RV_TO_DAC waveform           |
-| `pre_synth_waveform_3.png`         | Top-level pre-synthesis signals     |
-| `post_synth_waveform.png`          | Post-synthesis waveform             |
-| `yosys_schematic_terminal.png`     | Yosys terminal and schematic        |
-| `yosys_schematic_full_1.png`       | Full synthesized schematic — View 1 |
-| `yosys_schematic_full_2.png`       | Full synthesized schematic — View 2 |
-| `pre_vs_post_synth_comparison.png` | Pre vs Post synthesis comparison    |
-
-All images use **relative paths beginning with `./`**, so GitHub can load them from the same directory as this README.
+| File | Section | Description |
+|---|---|---|
+| `images/terminal_commands.png` | Pre-synthesis | Terminal log of `iverilog -DPRE_SYNTH_SIM`, `vvp`, `gtkwave` |
+| `images/pre_synth_waveform_1.png` | Pre-synthesis | Full signal list incl. RV_TO_DAC bits |
+| `images/pre_synth_waveform_2.png` | Pre-synthesis | Zoomed on RV_TO_DAC bit activity |
+| `images?post_synth_waveform.png`  |post-synthesis | Full signl list incl. RV_TO_DAc bits|
+| `images/pre_synth_waveform_3.png` | Pre-synthesis | Top-level signals before expansion |
+| `images/yosys_schematic_terminal.png` | Synthesis | Yosys `read_verilog`/`show` commands + resulting schematic |
+| `images/yosys_schematic_full_1.png` | Synthesis | Full post-synthesis schematic (view 1) |
+| `images/yosys_schematic_full_2.png` | Synthesis | Full post-synthesis schematic (view 2) |
+| `images/pre_vs_post_synth_comparison.png` | Comparison | Side-by-side GTKWave: pre-synth vs post-synth waveforms |
 
 ---
 
-# 8. Prerequisites & Tools
+## 8. Prerequisites & Tools
 
-This project uses the following tools:
+This flow was run on a Linux system (VSDSquadron board setup) with the following tools:
 
-| Tool                                | Purpose                                |
-| ----------------------------------- | -------------------------------------- |
-| Icarus Verilog (`iverilog` / `vvp`) | RTL and gate-level simulation          |
-| GTKWave                             | VCD waveform visualization             |
-| Yosys                               | RTL synthesis and schematic generation |
-| Graphviz / `xdot`                   | Viewing generated Yosys schematics     |
+| Tool | Purpose |
+|---|---|
+| [Icarus Verilog (`iverilog`/`vvp`)](http://iverilog.icarus.com/) | RTL and gate-level simulation |
+| [GTKWave](http://gtkwave.sourceforge.net/) | Waveform (`.vcd`) viewing |
+| [Yosys](https://yosyshq.net/yosys/) | Synthesis and schematic generation |
+| `xdot` / Graphviz | Rendering Yosys's `.dot` schematic output |
 
-## Installation on Ubuntu/Debian
+Install on Ubuntu/Debian-based systems with:
 
 ```bash
 sudo apt update
-
 sudo apt install iverilog gtkwave yosys graphviz xdot
 ```
 
 ---
 
-# 9. References
+## 9. References
 
-* [VSD BabySoC Workshop](https://www.vlsisystemdesign.com/)
-* [RVMYTH Core](https://github.com/shivanishah269/risc-v-core)
-* [Yosys Open SYnthesis Suite](https://yosyshq.net/yosys/)
-* [GTKWave](http://gtkwave.sourceforge.net/)
-* [Icarus Verilog](http://iverilog.icarus.com/)
-
----
-
-## Project Summary
-
-The VSDBabySoC was successfully simulated at the RTL level, synthesized using Yosys, and verified again using gate-level simulation.
-
-The comparison confirms that the synthesized design maintains the expected functional behavior of the original RTL implementation.
+- [VSD BabySoC workshop](https://www.vlsisystemdesign.com/) — original workshop this design is based on
+- [RVMYTH core (TL-Verilog RISC-V)](https://github.com/shivanishah269/risc-v-core) — CPU core used in this SoC
+- [Yosys Open SYnthesis Suite](https://yosyshq.net/yosys/) — synthesis tool documentation
