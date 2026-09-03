@@ -92,7 +92,6 @@ testbench.v:63: $finish called at 84999000 (1ps)
 
 The testbench runs for **84,999,000 ps (≈ 85 µs)** before calling `$finish`.
 
-![Terminal: compiling and running the pre-synthesis simulation](images/terminal_commands.png)
 *Terminal session — navigating the repo, compiling with `iverilog -DPRE_SYNTH_SIM`, running with `vvp`, and launching GTKWave.*
 
 ### Viewing the waveform
@@ -118,13 +117,13 @@ Signals observed: `CLK`, `reset`, `ENb_CP`, `ENb_VCO`, `REF`, `VCO_IN`, `VREFH`,
 
 This confirms the RTL design functions correctly end-to-end: PLL → CPU core → DAC.
 
-![Pre-synthesis waveform, full signal list](images/pre_synth_waveform_1.png)
+![Pre-synthesis waveform, full signal list](pre_synth_waveform_1.png)
 *Pre-synthesis GTKWave trace — CLK, reset, ENb_VCO, OUT, REF, VREFH/VREFL, and RV_TO_DAC[9:0] (with individual bits expanded).*
 
-![Pre-synthesis waveform, zoomed on RV_TO_DAC bit activity](images/pre_synth_waveform_2.png)
+![Pre-synthesis waveform, zoomed on RV_TO_DAC bit activity](pre_synth_waveform_2.png)
 *Same trace, showing RV_TO_DAC bit-level toggling and the corresponding DAC OUT steps in more detail.*
 
-![Pre-synthesis waveform, top-level signal group before expansion](images/pre_synth_waveform_3.png)
+![Pre-synthesis waveform, top-level signal group before expansion](pre_synth_waveform_3.png)
 *Top-level pre-synthesis signals (ENb_CP, ENb_VCO, OUT, REF, VCO_IN, VREFH, VREFL, reset) before drilling into RV_TO_DAC bits.*
 
 ---
@@ -166,14 +165,13 @@ VCO_IN  ─┘         ▲                     ▲                              
 This matches the RTL structure exactly — synthesis preserved the intended hierarchy and
 connectivity of the design.
 
-![Yosys read_verilog and show commands in terminal, with resulting schematic](images/yosys_schematic_terminal.png)
+![Yosys read_verilog and show commands in terminal, with resulting schematic](yosys_schematic_terminal.png)
 *Yosys terminal session (`read_verilog`, `show`, `show vsdbabysoc`) alongside the generated Dot Viewer schematic showing pll → core (rvmyth) → RV_TO_DAC → dac (avsddac) → OUT.*
 
-![Full post-synthesis schematic, view 1](images/yosys_schematic_full_1.png)
+![Full post-synthesis schematic, view 1](yosys_schematic_full_1.png)
 *Full-screen view of the synthesized schematic — ENb_CP/ENb_VCO/REF/VCO_IN feeding the PLL, PLL CLK driving the rvmyth core, core OUT feeding RV_TO_DAC, and RV_TO_DAC + VREFH feeding the DAC.*
 
-![Full post-synthesis schematic, view 2](images/yosys_schematic_full_2.png)
-*Same schematic, second capture — confirms the same pll → core → dac structure.*
+
 
 ---
 
@@ -209,7 +207,7 @@ hierarchy as `uut → core`, `uut → dac`, `uut → pll` sub-modules, instead o
 Both `pre_synth_sim.vcd` and `post_synth_sim.vcd` were opened side-by-side in GTKWave for direct
 comparison of `CLK`, `reset`, `OUT`, and `RV_TO_DAC[9:0]` (plus its individual bits).
 
-![Pre-synthesis vs post-synthesis waveform, side-by-side in GTKWave](images/pre_vs_post_synth_comparison.png)
+![Pre-synthesis vs post-synthesis waveform, side-by-side in GTKWave](pre_vs_post_synth_comparison.png)
 *Top window: `pre_synth_sim.vcd`. Bottom window: `post_synth_sim.vcd` (with `uut → core / dac / pll` hierarchy visible, confirming it's the synthesized netlist). `CLK`, `reset`, `OUT`, and `RV_TO_DAC[9:0]` line up between the two.*
 
 | Aspect | Pre-Synthesis (RTL) | Post-Synthesis (GLS) | Match? |
