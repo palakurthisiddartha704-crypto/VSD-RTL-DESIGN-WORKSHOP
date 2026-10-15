@@ -73,7 +73,7 @@ Through this training, I developed a better understanding of:
 
 <div align="center">
 
-### Thank You!
+### Thank You all !
 
 **VLSI RTL Design & Physical Design Course**
 
